@@ -1,0 +1,217 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acceso - Toda lengua y generación</title>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 24px 16px;
+      background: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+
+    h2 { font-size: 22px; }
+    p { color: #bbb; }
+
+    .panel {
+      max-width: 440px;
+      margin: 20px auto;
+      padding: 18px;
+      background: #222;
+      border-radius: 14px;
+    }
+
+    input {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid #555;
+      margin: 12px 0;
+      font-size: 16px;
+    }
+
+    button {
+      width: 100%;
+      padding: 15px;
+      margin-top: 10px;
+      border: 0;
+      border-radius: 8px;
+      background: white;
+      color: black;
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    #reader {
+      max-width: 440px;
+      margin: 20px auto;
+      overflow: hidden;
+      border-radius: 12px;
+      background: white;
+    }
+
+    #resultado {
+      max-width: 440px;
+      margin: 20px auto;
+      padding: 22px 12px;
+      border-radius: 12px;
+      background: #333;
+      font-size: 19px;
+      font-weight: bold;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    .valido { background: #176b36 !important; }
+    .rechazado { background: #a32929 !important; }
+    .oculto { display: none; }
+  </style>
+</head>
+
+<body>
+
+  <h2>TODA LENGUA Y GENERACIÓN</h2>
+  <p>Control de acceso · 28 de noviembre de 2026</p>
+
+  <div class="panel" id="acceso">
+    <h3>Acceso del personal</h3>
+    <input
+      type="password"
+      id="pin"
+      placeholder="Clave privada del lector"
+      autocomplete="off"
+    >
+    <button onclick="iniciarLector()">ABRIR CÁMARA</button>
+  </div>
+
+  <div id="reader" class="oculto"></div>
+
+  <div id="resultado">
+    Esperando inicio del lector...
+  </div>
+
+  <button id="siguiente" class="oculto" onclick="reanudar()">
+    ESCANEAR SIGUIENTE BOLETO
+  </button>
+
+  <script>
+    const API_URL =
+      "https://script.google.com/macros/s/AKfycbwP6Lhw6sXNWpiQ0V-pl6eAX7HnMoB41VH-x-6OQGS4-4QjniGHGKnK1Zsn9riAAxBz/exec";
+
+    let scanner;
+    let clave = "";
+    let procesando = false;
+
+    function mostrar(mensaje, clase = "") {
+      const caja = document.getElementById("resultado");
+      caja.className = clase;
+      caja.textContent = mensaje;
+    }
+
+    function iniciarLector() {
+      clave = document.getElementById("pin").value.trim();
+
+      if (!clave) {
+        mostrar("Introduce la clave del lector.");
+        return;
+      }
+
+      document.getElementById("acceso").classList.add("oculto");
+      document.getElementById("reader").classList.remove("oculto");
+
+      mostrar("Solicitando acceso a la cámara...");
+
+      scanner = new Html5Qrcode("reader");
+
+      scanner.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
+        token => procesarQR(token)
+      ).catch(error => {
+        mostrar(
+          "No se pudo iniciar la cámara. Revisa los permisos de Safari y abre esta página mediante HTTPS."
+        );
+        document.getElementById("acceso").classList.remove("oculto");
+      });
+    }
+
+    function procesarQR(token) {
+      if (procesando) return;
+
+      procesando = true;
+      scanner.pause(true);
+
+      mostrar("VERIFICANDO BOLETO...");
+
+      const callback = "__tlgRespuesta";
+
+      window[callback] = function(respuesta) {
+        document.getElementById("siguiente").classList.remove("oculto");
+
+        if (respuesta.ok) {
+          mostrar(
+            "ENTRADA AUTORIZADA\n\n" +
+            "Boleto: " + (respuesta.id || "") +
+            "\nComprador: " + (respuesta.nombre || ""),
+            "valido"
+          );
+        } else {
+          mostrar(
+            "ENTRADA RECHAZADA\n\n" +
+            respuesta.mensaje +
+            "\nBoleto: " + (respuesta.id || "N/A") +
+            "\nComprador: " + (respuesta.nombre || "N/A"),
+            "rechazado"
+          );
+        }
+
+        delete window[callback];
+      };
+
+      const url = API_URL +
+        "?callback=" + callback +
+        "&pin=" + encodeURIComponent(clave) +
+        "&token=" + encodeURIComponent(token) +
+        "&_=" + Date.now();
+
+      const script = document.createElement("script");
+
+      script.src = url;
+      script.onerror = function() {
+        mostrar("ERROR DE CONEXIÓN. INTENTA NUEVAMENTE.", "rechazado");
+        document.getElementById("siguiente").classList.remove("oculto");
+        delete window[callback];
+        script.remove();
+      };
+
+      script.onload = function() {
+        script.remove();
+      };
+
+      document.body.appendChild(script);
+    }
+
+    function reanudar() {
+      procesando = false;
+
+      document.getElementById("siguiente").classList.add("oculto");
+      mostrar("Esperando siguiente boleto...");
+
+      scanner.resume();
+    }
+  </script>
+
+</body>
+</html>
